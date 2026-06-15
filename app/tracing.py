@@ -1,59 +1,96 @@
 from __future__ import annotations
 
+import functools
 import os
 from pathlib import Path
 from typing import Any
 
-# Load .env before Langfuse initializes — SDK caches credentials at import time
 from dotenv import load_dotenv
+
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env", override=True)
 
 import logging as _logging
 
 _lf = None
-_LANGFUSE_AVAILABLE = False
 
 try:
     from langfuse import Langfuse
-    from langfuse.decorators import langfuse_context, observe
-    _LANGFUSE_AVAILABLE = True
-except ImportError:  # pragma: no cover
-    pass
 
-if _LANGFUSE_AVAILABLE:
-    try:
-        _lf = Langfuse(
-            public_key=os.getenv("LANGFUSE_PUBLIC_KEY", "").strip('"'),
-            secret_key=os.getenv("LANGFUSE_SECRET_KEY", "").strip('"'),
-            host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com").strip('"'),
-        )
-    except Exception as _e:  # pragma: no cover
-        _logging.warning("Langfuse client init failed: %s", _e)
-        _lf = None
+    _lf = Langfuse(
+        public_key=os.getenv("LANGFUSE_PUBLIC_KEY", "").strip('"'),
+        secret_key=os.getenv("LANGFUSE_SECRET_KEY", "").strip('"'),
+        host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com").strip('"'),
+    )
+except Exception as _e:
+    _logging.warning("Langfuse init failed: %s", _e)
+    _lf = None
 
-if not _LANGFUSE_AVAILABLE:  # pragma: no cover
-    def observe(*args: Any, **kwargs: Any):
-        def decorator(func):
+
+def observe(*deco_args: Any, **deco_kwargs: Any):
+    """Decorator that wraps a function in a Langfuse generation span (v3 API)."""
+
+    def decorator(func):
+        if _lf is None:
             return func
-        return decorator
 
-    class _DummyContext:
-        def update_current_trace(self, **kwargs: Any) -> None:
-            return None
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: Any):
+            with _lf.start_as_current_generation(name=func.__name__):
+                return func(*args, **kwargs)
 
-        def update_current_observation(self, **kwargs: Any) -> None:
-            return None
+        return wrapper
 
-        def flush(self) -> None:
-            return None
+    if len(deco_args) == 1 and callable(deco_args[0]):
+        return decorator(deco_args[0])
+    return decorator
 
-    langfuse_context = _DummyContext()
+
+class _LangfuseContext:
+    """Thin shim mapping the v2 langfuse_context API onto the v3 client."""
+
+    def update_current_trace(self, **kwargs: Any) -> None:
+        if _lf is None:
+            return
+        try:
+            v3: dict[str, Any] = {}
+            for key in ("user_id", "session_id", "name", "tags", "metadata"):
+                if key in kwargs:
+                    v3[key] = kwargs[key]
+            if v3:
+                _lf.update_current_trace(**v3)
+        except Exception as exc:
+            _logging.debug("update_current_trace: %s", exc)
+
+    def update_current_observation(self, **kwargs: Any) -> None:
+        if _lf is None:
+            return
+        try:
+            v3: dict[str, Any] = {}
+            if "metadata" in kwargs:
+                v3["metadata"] = kwargs["metadata"]
+            if "usage_details" in kwargs:
+                ud = kwargs["usage_details"]
+                v3["usage"] = {"input": ud.get("input", 0), "output": ud.get("output", 0)}
+            if v3:
+                _lf.update_current_generation(**v3)
+        except Exception as exc:
+            _logging.debug("update_current_observation: %s", exc)
+
+    def flush(self) -> None:
+        if _lf is not None:
+            try:
+                _lf.flush()
+            except Exception:
+                pass
+
+
+langfuse_context = _LangfuseContext()
 
 
 def tracing_enabled() -> bool:
     pk = os.getenv("LANGFUSE_PUBLIC_KEY", "").strip('"')
     sk = os.getenv("LANGFUSE_SECRET_KEY", "").strip('"')
-    return bool(pk and sk)
+    return bool(pk and sk and _lf is not None)
 
 
 def flush() -> None:
@@ -65,12 +102,5 @@ def flush() -> None:
 
 
 def langfuse_flush() -> None:
-    if _lf is not None:
-        try:
-            _lf.flush()
-        except Exception:
-            pass
-    try:
-        langfuse_context.flush()
-    except Exception:
-        pass
+    flush()
+    langfuse_context.flush()
