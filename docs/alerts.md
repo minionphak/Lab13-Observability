@@ -38,3 +38,17 @@
   - shorten prompts
   - route easy requests to cheaper model
   - apply prompt cache
+
+## 4. Low quality score
+- Severity: P2
+- Trigger: `quality_score_avg < 0.6 for 15m`
+- Impact: users receive low-quality or irrelevant responses
+- First checks:
+  1. Review recent traces in Langfuse for low `quality_score` metadata
+  2. Check if RAG retrieval is returning matched docs (`doc_count > 0`)
+  3. Inspect `query_preview` in trace metadata for off-topic requests
+  4. Verify no `[REDACTED` tokens leaked into the answer (score penalty)
+- Mitigation:
+  - expand CORPUS keywords in mock_rag.py to improve retrieval hit rate
+  - add fallback answer quality check before returning response
+  - if PII redaction is corrupting answers, review scrub_text patterns

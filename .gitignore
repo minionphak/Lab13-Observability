@@ -7,3 +7,7 @@ data/audit.jsonl
 .env
 .pytest_cache/
 .antigravity/
+output/
+.codegraph/
+uvicorn.log
+uvicorn.err

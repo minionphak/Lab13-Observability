@@ -35,7 +35,7 @@ def observe(*deco_args: Any, **deco_kwargs: Any):
 
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any):
-            with _lf.start_as_current_generation(name=func.__name__):
+            with _lf.start_as_current_span(name=func.__name__):
                 return func(*args, **kwargs)
 
         return wrapper
@@ -65,14 +65,13 @@ class _LangfuseContext:
         if _lf is None:
             return
         try:
-            v3: dict[str, Any] = {}
-            if "metadata" in kwargs:
-                v3["metadata"] = kwargs["metadata"]
+            meta: dict[str, Any] = dict(kwargs.get("metadata") or {})
             if "usage_details" in kwargs:
                 ud = kwargs["usage_details"]
-                v3["usage"] = {"input": ud.get("input", 0), "output": ud.get("output", 0)}
-            if v3:
-                _lf.update_current_generation(**v3)
+                meta["tokens_in"] = ud.get("input", 0)
+                meta["tokens_out"] = ud.get("output", 0)
+            if meta:
+                _lf.update_current_span(metadata=meta)
         except Exception as exc:
             _logging.debug("update_current_observation: %s", exc)
 
