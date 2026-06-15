@@ -8,17 +8,30 @@ from typing import Any
 from dotenv import load_dotenv
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env", override=True)
 
+import logging as _logging
+
+_lf = None
+_LANGFUSE_AVAILABLE = False
+
 try:
     from langfuse import Langfuse
     from langfuse.decorators import langfuse_context, observe
+    _LANGFUSE_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    pass
 
-    # Explicit initialization so credentials are never stale regardless of import order
-    _lf = Langfuse(
-        public_key=os.getenv("LANGFUSE_PUBLIC_KEY", "").strip('"'),
-        secret_key=os.getenv("LANGFUSE_SECRET_KEY", "").strip('"'),
-        host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com").strip('"'),
-    )
-except Exception:  # pragma: no cover
+if _LANGFUSE_AVAILABLE:
+    try:
+        _lf = Langfuse(
+            public_key=os.getenv("LANGFUSE_PUBLIC_KEY", "").strip('"'),
+            secret_key=os.getenv("LANGFUSE_SECRET_KEY", "").strip('"'),
+            host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com").strip('"'),
+        )
+    except Exception as _e:  # pragma: no cover
+        _logging.warning("Langfuse client init failed: %s", _e)
+        _lf = None
+
+if not _LANGFUSE_AVAILABLE:  # pragma: no cover
     def observe(*args: Any, **kwargs: Any):
         def decorator(func):
             return func
@@ -31,6 +44,9 @@ except Exception:  # pragma: no cover
         def update_current_observation(self, **kwargs: Any) -> None:
             return None
 
+        def flush(self) -> None:
+            return None
+
     langfuse_context = _DummyContext()
 
 
@@ -41,7 +57,20 @@ def tracing_enabled() -> bool:
 
 
 def flush() -> None:
+    if _lf is not None:
+        try:
+            _lf.flush()
+        except Exception:
+            pass
+
+
+def langfuse_flush() -> None:
+    if _lf is not None:
+        try:
+            _lf.flush()
+        except Exception:
+            pass
     try:
-        _lf.flush()
+        langfuse_context.flush()
     except Exception:
         pass

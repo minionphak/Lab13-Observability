@@ -16,7 +16,7 @@ from .metrics import record_error, snapshot
 from .middleware import CorrelationIdMiddleware
 from .pii import hash_user_id, summarize_text
 from .schemas import ChatRequest, ChatResponse
-from .tracing import flush as flush_traces, tracing_enabled
+from .tracing import flush as flush_traces, langfuse_flush, tracing_enabled
 
 configure_logging()
 log = get_logger()
@@ -38,6 +38,12 @@ async def startup() -> None:
 @app.on_event("shutdown")
 async def shutdown() -> None:
     flush_traces()
+
+
+@app.post("/flush")
+async def flush_endpoint() -> dict:
+    langfuse_flush()
+    return {"ok": True}
 
 
 @app.get("/health")
