@@ -353,11 +353,12 @@ Invoke-RestMethod http://127.0.0.1:8000/metrics
 
 > Updated each session. Run `git log --oneline` to refresh.
 
-| Hash | Message |
-|---|---|
-| `9ac5e22` | docs: update scoring metric to 60/40 split and update grading policy |
-| `350e2f0` | docs: update report template for machine-parsing and individual contribution |
-| `e3735b0` | feat: initial gapped template for observability lab |
+| Hash | Message | Author |
+|---|---|---|
+| `96a6003` | feat: implement observability lab — solo submission | **Phạm Hoàng Anh Kiệt** |
+| `9ac5e22` | docs: update scoring metric to 60/40 split and update grading policy | Instructor |
+| `350e2f0` | docs: update report template for machine-parsing and individual contribution | Instructor |
+| `e3735b0` | feat: initial gapped template for observability lab | Instructor |
 
 ### Commits by This Student (Phạm Hoàng Anh Kiệt)
 
